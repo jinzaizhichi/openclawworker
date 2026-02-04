@@ -1,0 +1,38 @@
+# 依赖包（必须排除，由 Dockerfile 内部的 npm/pnpm 重新安装）
+node_modules
+.npm
+npm-debug.log*
+yarn-error.log*
+
+# Wrangler 相关缓存与日志（防止冲突的关键）
+.wrangler
+.dev.vars
+.wrangler/deploy/config.json
+wrangler-*.log
+
+# Git 仓库信息
+.git
+.gitignore
+.github
+
+# 操作系统与编辑器临时文件
+.DS_Store
+.idea
+.vscode
+*.swp
+*.swo
+__pycache__
+
+# 构建产物（除非你确定 Dockerfile 需要直接 COPY 编译后的 dist）
+dist
+build
+out
+
+# 环境变量（防止本地敏感信息泄露进镜像）
+.env
+.env.*
+!.env.example
+
+# 临时文件
+tmp
+temp
