@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../types';
-import { findExistingGatewayProcess, waitForProcess } from '../gateway';
+import { findExistingGatewayProcess, killGateway, waitForProcess } from '../gateway';
+import { handleScheduled } from '../cron/handler';
 
 /**
  * Debug routes for inspecting container state
@@ -384,6 +385,51 @@ debug.get('/container-config', async (c) => {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return c.json({ error: errorMessage }, 500);
   }
+});
+
+// POST /debug/stop-gateway - Kill the gateway process without restarting
+debug.post('/stop-gateway', async (c) => {
+  const sandbox = c.get('sandbox');
+  const process = await findExistingGatewayProcess(sandbox);
+  await killGateway(sandbox);
+  return c.json({
+    success: true,
+    message: 'Gateway stopped',
+    previousProcessId: process?.id ?? null,
+  });
+});
+
+// POST /debug/destroy-container - Destroy the sandbox container entirely
+// Simulates the container going to sleep. The next Sandbox API call will
+// start a fresh container. Used by e2e tests to verify cron wake behavior.
+debug.post('/destroy-container', async (c) => {
+  const sandbox = c.get('sandbox');
+  await sandbox.destroy();
+  return c.json({ success: true, message: 'Container destroyed' });
+});
+
+// POST /debug/trigger-cron - Trigger the cron wake handler manually
+// Calls the same function as the Workers Cron Trigger without waiting 60s.
+debug.post('/trigger-cron', async (c) => {
+  try {
+    await handleScheduled(c.env);
+    return c.json({ success: true, message: 'Cron handler executed' });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ success: false, error: msg }, 500);
+  }
+});
+
+// POST /debug/r2-put?key=<key> - Write content to R2 bucket
+// Used by e2e tests to upload fake cron store or other test data.
+debug.post('/r2-put', async (c) => {
+  const key = c.req.query('key');
+  if (!key) {
+    return c.json({ error: 'key query parameter required' }, 400);
+  }
+  const body = await c.req.text();
+  await c.env.BACKUP_BUCKET.put(key, body);
+  return c.json({ success: true, key, size: body.length });
 });
 
 export { debug };
