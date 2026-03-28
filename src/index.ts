@@ -258,8 +258,16 @@ app.all('*', async (c) => {
 
   console.log('[PROXY] Handling request:', url.pathname);
 
-  // Check if gateway is already running
-  const existingProcess = await findExistingGatewayProcess(sandbox);
+  // Check if gateway is already running (with timeout to avoid hanging on cold start)
+  let existingProcess = null;
+  try {
+    existingProcess = await Promise.race([
+      findExistingGatewayProcess(sandbox),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 10_000)),
+    ]);
+  } catch {
+    // Treat as not running
+  }
   const isGatewayReady = existingProcess !== null && existingProcess.status === 'running';
 
   // Only restore from backup when the gateway needs to start.
