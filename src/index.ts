@@ -509,11 +509,22 @@ app.all('*', async (c) => {
   console.log('[HTTP] Response status:', httpResponse.status);
 
   // For HTML requests, verify we got actual content from the gateway.
-  // containerFetch can return a 200 with empty body if the gateway's
+  // containerFetch can return a 200 with empty/streaming body if the gateway's
   // HTTP handler hasn't fully initialized. Show the loading page instead
   // of a blank page that the user would be stuck on forever.
   if (acceptsHtml) {
-    const body = await httpResponse.text();
+    let body: string;
+    try {
+      body = await Promise.race([
+        httpResponse.text(),
+        new Promise<string>((_, reject) =>
+          setTimeout(() => reject(new Error('body read timeout')), 10_000),
+        ),
+      ]);
+    } catch {
+      console.log('[HTTP] Body read timed out, serving loading page');
+      return c.html(loadingPageHtml);
+    }
     if (!body || body.length < 50) {
       console.log(
         `[HTTP] Empty/short response (${body.length} bytes) for HTML request, serving loading page`,
